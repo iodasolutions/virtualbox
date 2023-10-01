@@ -1,0 +1,56 @@
+Le pack system fournit au provider virtualbox une image system, dont il extrait un fichier vmdk
+L'image system est récupérée sur un repo officiel de la distribution:
+ex: ubuntu 20.04 LTS
+https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.vmdk
+
+Toute vm créée appartient à un environnement.
+Chaque environnement possède par défaut son réseau géré via dhcp, en 192.168.X.0/24 (X>0)
+192.168.X.1 est l'adresse du serveur DHCP. La première adresse disponible est don 192.168.X.2 jusqu'à 192.168.99.254
+Le sous-réseau d'un environnement est créé à l'initialisation de la première instance.
+Si un environnement n'a plus d'instance, le server dhcp est supprimé.
+supprimer un serveur DHCP:
+vboxmanage dhcpserver remove --netname default_virtualbox
+Ajouter un serveur DHCP:
+vboxmanage dhcpserver add --netname default_virtualbox \
+                          --ip 192.168.X.1 \
+                          --netmask 255.255.255.0 \
+                          --lowerip 192.168.X.2 \
+                          --upperip 192.168.X.254 \
+                          --enable
+Toute vm a une interface NAT par défaut, et une interface reliant les VMs de l'environnement entre elles:
+vboxmanage modifyvm <NAME> --nic2 intnet --intnet2 <DHCP>
+intnet définit un réseau insterne ou seules les VMs communiquent entre elles.
+	vm.Vbox().Modify(ctx, "--nic2", "intnet")
+	vm.Vbox().Modify(ctx, "--intnet2", subnet)
+
+virtualbox nécessite la fourniture d'un disk vmdk représentant l'os guest.
+Dans ce disque, les paquets nécessaires à la compilation des guest additions sont présents.
+ubuntu:
+apt-get update
+apt-get install -y build-essential dkms net-tools
+# net-tools sera utilisé pour le réseau (ifconfig) à la place de netplan. L'objectif est d'avoir le même outil pour centos et ubuntu.
+
+mkdir -p /mnt/vbox
+mount /dev/sr1 /mnt/vbox
+sh /mnt/vbox/VBoxLinuxAdditions.run --nox11
+umount /dev/sr1
+rm -rf /mnt/vbox
+apt-get remove -y build-essential dkms
+
+rm -rf /home/ubuntu/.ssh
+cloud-init clean
+shutdown -h now
+
+centos
+yum -y install epel-release
+yum -y update
+shutdown -r now
+yum install -y make gcc kernel-headers kernel-devel perl dkms bzip2
+cat > /etc/profile.d/virtualbox.sh <<EOF
+export KERN_DIR=/usr/src/kernels/$(uname -r)
+EOF
+cloud-init clean
+
+
+qemu-img convert -f qcow2 -O vmdk CentOS-8-GenericCloud-8.4.2105-20210603.0.x86_64.qcow2 CentOS-8-GenericCloud-8.4.2105-20210603.0.x86_64.vmdk
+
