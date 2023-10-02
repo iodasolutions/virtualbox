@@ -1,5 +1,7 @@
 github.com/andybalholm/brotli v1.0.1 h1:KqhlKozYbRtJvsPrrEeXcO+N2l6NYT5A2QAFmSULpEc=
 github.com/andybalholm/brotli v1.0.1/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
+github.com/andybalholm/brotli v1.0.5 h1:8uQZIdzKmjc/iuPu7O2ioW48L81FgatrcpfFmiq/cCs=
+github.com/andybalholm/brotli v1.0.5/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dsnet/compress v0.0.2-0.20210315054119-f66993602bf5 h1:iFaUwBSo5Svw6L7HYpRu/0lE3e0BaElwnNO1qkNQxBY=
@@ -16,6 +18,8 @@ github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+l
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/iodasolutions/xbee-common v0.0.0-20231001200208-6c3a358557ef h1:DzZXAhQGKXrCbNd0gScwbvQO379wculZhGxNBxYztUo=
 github.com/iodasolutions/xbee-common v0.0.0-20231001200208-6c3a358557ef/go.mod h1:nva2tR6n86GEcsQNxWNBVc72lMd9ykxTBcKKEUbbkn0=
+github.com/iodasolutions/xbee-common v0.0.0-20231002163728-adb16c8ae6d4 h1:3xIRJZw0B/EC4WYv+idwU0CEMgtIeoY6q5kO7MyhWC8=
+github.com/iodasolutions/xbee-common v0.0.0-20231002163728-adb16c8ae6d4/go.mod h1:nva2tR6n86GEcsQNxWNBVc72lMd9ykxTBcKKEUbbkn0=
 github.com/jlaffaye/ftp v0.2.0 h1:lXNvW7cBu7R/68bknOX3MrRIIqZ61zELs1P2RAiA3lg=
 github.com/jlaffaye/ftp v0.2.0/go.mod h1:is2Ds5qkhceAPy2xD6RLI6hmp/qysSoymZ+Z2uTnspI=
 github.com/kdomanski/iso9660 v0.4.0 h1:BPKKdcINz3m0MdjIMwS0wx1nofsOjxOq8TOr45WGHFg=

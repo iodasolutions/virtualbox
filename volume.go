@@ -3,10 +3,10 @@ package virtualbox
 import (
 	"context"
 	"fmt"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/log2"
 	"github.com/iodasolutions/xbee-common/newfs"
 	"github.com/iodasolutions/xbee-common/provider"
-	"github.com/iodasolutions/xbee-common/util"
 	"strings"
 )
 
@@ -38,17 +38,17 @@ func (v *VboxVolume) File() newfs.File {
 	return v.Location.ChildFile(fmt.Sprintf("%s.%s", v.Name, strings.ToLower(v.Format)))
 }
 
-func (v *VboxVolume) create(ctx context.Context) *util.XbeeError {
+func (v *VboxVolume) create(ctx context.Context) *cmd.XbeeError {
 	log2.Infof("Create medium %s on host", v.File())
 	err := VboxFrom("").CreateMedium(ctx, v.File(), v.Size, v.Format)
 	return err
 }
-func (v *VboxVolume) Delete(ctx context.Context) error {
+func (v *VboxVolume) Delete(ctx context.Context) *cmd.XbeeError {
 	log2.Infof("Delete medium %s on host", v.File())
 	return VboxFrom("").RemoveMedium(ctx, v.File())
 }
 
-func (v *VboxVolume) EnsureHostVolumeAttached(ctx context.Context, vm *Vm) *util.XbeeError {
+func (v *VboxVolume) EnsureHostVolumeAttached(ctx context.Context, vm *Vm) *cmd.XbeeError {
 	attachedVolumes := vm.info.AttachedVolumes()
 	volumePort, ok := attachedVolumes[v.File().String()]
 	if !ok {

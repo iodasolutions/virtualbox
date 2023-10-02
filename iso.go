@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"github.com/iodasolutions/virtualbox/properties"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/newfs"
 	"github.com/iodasolutions/xbee-common/provider"
 	"github.com/iodasolutions/xbee-common/template"
-	"github.com/iodasolutions/xbee-common/util"
 	"github.com/kdomanski/iso9660"
 	"strings"
 )
@@ -53,44 +53,44 @@ func (iso *Iso) authorizedKeyScript() string {
 	}
 	w := &bytes.Buffer{}
 	if err := template.OutputWithTemplate(script, w, model, nil); err != nil {
-		panic(util.Error("failed to parse authorizedKeyScript template : %v", err))
+		panic(cmd.Error("failed to parse authorizedKeyScript template : %v", err))
 	}
 	return w.String()
 }
 
-func (iso *Iso) CreateAndAttach(ctx context.Context) *util.XbeeError {
+func (iso *Iso) CreateAndAttach(ctx context.Context) *cmd.XbeeError {
 	aMap := map[string]interface{}{
 		"name":       iso.vm.HostName,
 		"authorized": base64.StdEncoding.EncodeToString([]byte(iso.authorizedKeyScript())),
 	}
 	t1 := metadata
 	if err := template.Output(&t1, aMap, nil); err != nil {
-		return util.Error("cannot parse template metadata: %v", err)
+		return cmd.Error("cannot parse template metadata: %v", err)
 	}
 	t2 := userdata
 	if err := template.Output(&t2, aMap, nil); err != nil {
-		return util.Error("cannot parse template userdata: %v", err)
+		return cmd.Error("cannot parse template userdata: %v", err)
 	}
 	writer, err := iso9660.NewWriter()
 	if err != nil {
-		return util.Error("failed to create writer: %s", err)
+		return cmd.Error("failed to create writer: %s", err)
 	}
 	defer writer.Cleanup()
 	err = writer.AddFile(strings.NewReader(t1), "meta-data")
 	if err != nil {
-		panic(util.Error("failed to add file: %s", err))
+		panic(cmd.Error("failed to add file: %s", err))
 	}
 
 	err = writer.AddFile(strings.NewReader(t2), "user-data")
 	if err != nil {
-		panic(util.Error("failed to add file: %s", err))
+		panic(cmd.Error("failed to add file: %s", err))
 	}
 	isoFile := iso.File()
 	fd := isoFile.OpenFileForCreation()
 	defer fd.Close()
 	err = writer.WriteTo(fd, "cidata")
 	if err != nil {
-		panic(util.Error("failed to write ISO image: %s", err))
+		panic(cmd.Error("failed to write ISO image: %s", err))
 	}
 	vb := VboxFrom(iso.vm.Name())
 	return vb.attacheDvdStorage(ctx, isoFile, "0")
@@ -112,14 +112,14 @@ func (iso *Iso) File() newfs.File {
 	isoFile := properties.VmFolder(iso.vm.Name()).ChildFile("seed.iso")
 	return isoFile
 }
-func (iso *Iso) DetachAndDelete(ctx context.Context) *util.XbeeError {
+func (iso *Iso) DetachAndDelete(ctx context.Context) *cmd.XbeeError {
 	vb := VboxFrom(iso.vm.Name())
 	if err := vb.detachDvdStorage(ctx, "0"); err != nil {
 		return err
 	}
 	isoFile := iso.File()
 	if err := isoFile.EnsureDelete(); err != nil {
-		return util.Error("cannot ensure %s was deleted: %v", isoFile, err)
+		return cmd.Error("cannot ensure %s was deleted: %v", isoFile, err)
 	}
 	return nil
 }

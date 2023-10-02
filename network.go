@@ -3,9 +3,9 @@ package virtualbox
 import (
 	"bytes"
 	"context"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/exec2"
 	"github.com/iodasolutions/xbee-common/template"
-	"github.com/iodasolutions/xbee-common/util"
 )
 
 var network = `#!/bin/bash
@@ -31,7 +31,7 @@ func networkScript(index int) string {
 	}
 	w := &bytes.Buffer{}
 	if err := template.OutputWithTemplate(network, w, model, nil); err != nil {
-		panic(util.Error("failed to parse network template : %v", err))
+		panic(cmd.Error("failed to parse network template : %v", err))
 	}
 	return w.String()
 }

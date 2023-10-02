@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/iodasolutions/virtualbox/properties"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/constants"
 	"github.com/iodasolutions/xbee-common/exec2"
 	"github.com/iodasolutions/xbee-common/log2"
@@ -137,7 +138,7 @@ func (vm *Vm) Vbox() *Vbox {
 	return VboxFrom(vm.Name())
 }
 
-func (vm *Vm) Destroy(ctx context.Context) *util.XbeeError {
+func (vm *Vm) Destroy(ctx context.Context) *cmd.XbeeError {
 	state := vm.info.State()
 	if state == constants.State.Up {
 		if err := vm.HaltInstance(ctx); err != nil {
@@ -159,7 +160,7 @@ func (vm *Vm) Destroy(ctx context.Context) *util.XbeeError {
 	return nil
 }
 
-func extractVmdk(aPath newfs.File) (newfs.File, *util.XbeeError) {
+func extractVmdk(aPath newfs.File) (newfs.File, *cmd.XbeeError) {
 	if strings.HasSuffix(string(aPath), ".vmdk") {
 		return aPath, nil
 	} else {
@@ -175,7 +176,7 @@ func extractVmdk(aPath newfs.File) (newfs.File, *util.XbeeError) {
 			targetPath := strings.TrimSuffix(string(aPath), ".box") + ".vmdk"
 			tarPath := strings.TrimSuffix(string(aPath), ".box") + ".tar"
 			if err := os.Rename(string(aPath), tarPath); err != nil {
-				return "", util.Error("cannot rename %s to %s: %v", aPath, tarPath, err)
+				return "", cmd.Error("cannot rename %s to %s: %v", aPath, tarPath, err)
 			}
 			defer func() {
 				if err := os.Rename(tarPath, string(aPath)); err != nil {
@@ -183,26 +184,26 @@ func extractVmdk(aPath newfs.File) (newfs.File, *util.XbeeError) {
 				}
 			}()
 			if err := newfs.File(tarPath).Untar(); err != nil {
-				return "", util.Error("cannot extract %s: %v", tarPath, err)
+				return "", cmd.Error("cannot extract %s: %v", tarPath, err)
 			}
 			children := newfs.File(tarPath).Dir().ChildrenFilesEndingWith(".vmdk")
 			if len(children) == 1 {
 				if targetPath != string(children[0]) {
 					if err := os.Rename(string(children[0]), targetPath); err != nil {
-						return "", util.Error("cannot rename %s to %s: %v", children[0], targetPath, err)
+						return "", cmd.Error("cannot rename %s to %s: %v", children[0], targetPath, err)
 					}
 				}
 				return newfs.File(targetPath), nil
 			} else {
-				return "", util.Error("file %s is a tar file, but it contains no component with extension vmdk", aPath)
+				return "", cmd.Error("file %s is a tar file, but it contains no component with extension vmdk", aPath)
 			}
 		} else {
-			return "", util.Error("unrecognized extension in file : %s", aPath)
+			return "", cmd.Error("unrecognized extension in file : %s", aPath)
 		}
 	}
 }
 
-func (vm *Vm) create(ctx context.Context) (client *exec2.SSHClient, err *util.XbeeError) {
+func (vm *Vm) create(ctx context.Context) (client *exec2.SSHClient, err *cmd.XbeeError) {
 	log2.Infof("%s : Host does not exist, first create it", vm.HostName)
 	var originDisk newfs.File
 	originDisk, err = net2.DownloadIfNotCached(ctx, vm.specification.Disk)
@@ -278,9 +279,9 @@ func (vm *Vm) create(ctx context.Context) (client *exec2.SSHClient, err *util.Xb
 	return
 }
 
-func waitUntilCloudInitFinished(client *exec2.SSHClient) *util.XbeeError {
+func waitUntilCloudInitFinished(client *exec2.SSHClient) *cmd.XbeeError {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Minute)
-	ff := func(ctx context.Context) *util.XbeeError {
+	ff := func(ctx context.Context) *cmd.XbeeError {
 		for {
 			out, _ := client.RunCommandToOut("if [ -f /var/lib/cloud/instance/boot-finished ]; then echo 1; else echo 0; fi")
 			out = strings.TrimSpace(out)
@@ -315,9 +316,9 @@ func (vm *Vm) cleanCloudInitAndHalt(client *exec2.SSHClient) error {
 	return nil
 }
 
-func (vm *Vm) waitSSH(ctx context.Context) (client *exec2.SSHClient, err *util.XbeeError) {
+func (vm *Vm) waitSSH(ctx context.Context) (client *exec2.SSHClient, err *cmd.XbeeError) {
 	log2.Infof("%s : wait until SSH open...", vm.HostName)
-	ff := func(_ context.Context) *util.XbeeError {
+	ff := func(_ context.Context) *cmd.XbeeError {
 		for {
 			client, err = exec2.Connect("127.0.0.1", vm.sshPort, vm.User)
 			if err == nil {
@@ -344,7 +345,7 @@ func (vm *Vm) ExportToVmdk(ctx context.Context) error {
 	}
 	vmdks := tmpDir.ChildrenFilesEndingWith(".vmdk")
 	if len(vmdks) != 1 {
-		panic(util.Error("expects one vmdk file in folder %s, actual is %d", tmpDir, len(vmdks)))
+		panic(cmd.Error("expects one vmdk file in folder %s, actual is %d", tmpDir, len(vmdks)))
 	}
 	vmdk := vmdks[0]
 	vmdk.CopyToPath(vm.specification.File())
@@ -352,7 +353,7 @@ func (vm *Vm) ExportToVmdk(ctx context.Context) error {
 	return nil
 }
 
-func (vm *Vm) configureNic(ctx context.Context) *util.XbeeError {
+func (vm *Vm) configureNic(ctx context.Context) *cmd.XbeeError {
 	subnet, err := EnsureXbeenetExist(ctx)
 	if err != nil {
 		return err
@@ -367,7 +368,7 @@ func (vm *Vm) configureNic(ctx context.Context) *util.XbeeError {
 	return vb.Modify(ctx, "--intnet2", subnet)
 }
 
-func (vm *Vm) Start(ctx context.Context) (*exec2.SSHClient, *util.XbeeError) {
+func (vm *Vm) Start(ctx context.Context) (*exec2.SSHClient, *cmd.XbeeError) {
 	if err := vm.ConfigureBeforeStart(ctx); err != nil {
 		return nil, err
 	}
@@ -383,7 +384,7 @@ func (vm *Vm) Start(ctx context.Context) (*exec2.SSHClient, *util.XbeeError) {
 	return client, nil
 }
 
-func (vm *Vm) Up(ctx context.Context) (err *util.XbeeError) {
+func (vm *Vm) Up(ctx context.Context) (err *cmd.XbeeError) {
 	var client *exec2.SSHClient
 	if vm.info.State() == constants.State.NotExisting {
 		vm.InitiallyNotExisting = true
@@ -413,7 +414,7 @@ func (vm *Vm) Up(ctx context.Context) (err *util.XbeeError) {
 	return
 }
 
-func (vm *Vm) ConfigureBeforeStart(ctx context.Context) *util.XbeeError {
+func (vm *Vm) ConfigureBeforeStart(ctx context.Context) *cmd.XbeeError {
 	if err := vm.DeleteNATRules(ctx); err != nil {
 		return err
 	}
@@ -429,7 +430,7 @@ func (vm *Vm) ConfigureBeforeStart(ctx context.Context) *util.XbeeError {
 	return vm.configureMemoryAndCpus(ctx)
 }
 
-func (vm *Vm) EnsureXbeeSharedFolder(ctx context.Context) *util.XbeeError {
+func (vm *Vm) EnsureXbeeSharedFolder(ctx context.Context) *cmd.XbeeError {
 	if _, ok := vm.info.SharedFolders()["xbee"]; !ok {
 		if err := vm.Vbox().AddSharedFolder(ctx, newfs.XbeeIntern().CacheArtefacts().String(), "xbee"); err != nil {
 			return err
@@ -438,7 +439,7 @@ func (vm *Vm) EnsureXbeeSharedFolder(ctx context.Context) *util.XbeeError {
 	return nil
 }
 
-func (vm *Vm) EnsureHostVolumesExistAndAttached(ctx context.Context) *util.XbeeError {
+func (vm *Vm) EnsureHostVolumesExistAndAttached(ctx context.Context) *cmd.XbeeError {
 	for volName, volume := range vm.volumes {
 		if strings.HasPrefix(volName, "/") {
 			if err := vm.addSharedFolder(ctx, volName); err != nil {
@@ -458,7 +459,7 @@ func (vm *Vm) EnsureHostVolumesExistAndAttached(ctx context.Context) *util.XbeeE
 	return nil
 }
 
-func (vm *Vm) addSharedFolder(ctx context.Context, volumeName string) *util.XbeeError {
+func (vm *Vm) addSharedFolder(ctx context.Context, volumeName string) *cmd.XbeeError {
 	if volumeName != "" && strings.HasPrefix(volumeName, "/") {
 		hostFolder := newfs.Folder(volumeName)
 		hostFolder.EnsureExists()
@@ -469,14 +470,14 @@ func (vm *Vm) addSharedFolder(ctx context.Context, volumeName string) *util.Xbee
 }
 
 // configureMemoryAndCpus is used before starting a new or existing VM.
-func (vm *Vm) configureMemoryAndCpus(ctx context.Context) *util.XbeeError {
+func (vm *Vm) configureMemoryAndCpus(ctx context.Context) *cmd.XbeeError {
 	log2.Infof("memory set to %d Mo", vm.specification.Memory)
 	log2.Infof("cpus set to %d", vm.specification.Cpus)
 	return vm.Vbox().Modify(ctx, "--memory", strconv.Itoa(vm.specification.Memory), "--cpus", strconv.Itoa(vm.specification.Cpus))
 }
 
 // configureSharedPorts is used before starting a new or existing VM.
-func (vm *Vm) configureSharedPorts(ctx context.Context) (err *util.XbeeError) {
+func (vm *Vm) configureSharedPorts(ctx context.Context) (err *cmd.XbeeError) {
 	if err = vm.assignSSHPortFromHost(ctx); err != nil {
 		return
 	}
@@ -486,7 +487,7 @@ func (vm *Vm) configureSharedPorts(ctx context.Context) (err *util.XbeeError) {
 	return vm.ExposePorts(ctx, vm.Ports)
 }
 
-func (vm *Vm) assignSSHPortFromHost(ctx context.Context) *util.XbeeError {
+func (vm *Vm) assignSSHPortFromHost(ctx context.Context) *cmd.XbeeError {
 	sshPortS := vm.sshPort
 	if sshPortS == "" {
 		sshPortS = "0"
@@ -506,7 +507,7 @@ func (vm *Vm) assignSSHPortFromHost(ctx context.Context) *util.XbeeError {
 	return nil
 }
 
-func (vm *Vm) EnsureVolumesDetached(ctx context.Context) *util.XbeeError {
+func (vm *Vm) EnsureVolumesDetached(ctx context.Context) *cmd.XbeeError {
 	for name := range vm.volumes {
 		if !strings.HasPrefix(name, "/") {
 			attachedVolumes := vm.info.AttachedVolumes()
@@ -521,7 +522,7 @@ func (vm *Vm) EnsureVolumesDetached(ctx context.Context) *util.XbeeError {
 	return nil
 }
 
-func (vm *Vm) EnsureIsoDetached(ctx context.Context) *util.XbeeError {
+func (vm *Vm) EnsureIsoDetached(ctx context.Context) *cmd.XbeeError {
 	if vm.info.IsSeedAttached() {
 		iso := IsoFor(vm)
 		if err := iso.DetachAndDelete(ctx); err != nil {
@@ -536,7 +537,7 @@ func (vm *Vm) EnsureIsoDetached(ctx context.Context) *util.XbeeError {
 	return nil
 }
 
-func (vm *Vm) DeleteNATRules(ctx context.Context) *util.XbeeError {
+func (vm *Vm) DeleteNATRules(ctx context.Context) *cmd.XbeeError {
 	for name, port := range vm.info.NATRules() {
 		if err := vm.Vbox().DeleteNATRule(ctx, name); err != nil {
 			return err
@@ -546,7 +547,7 @@ func (vm *Vm) DeleteNATRules(ctx context.Context) *util.XbeeError {
 	return nil
 }
 
-func (vm *Vm) ExposePorts(ctx context.Context, ports []string) *util.XbeeError {
+func (vm *Vm) ExposePorts(ctx context.Context, ports []string) *cmd.XbeeError {
 	for _, port := range ports {
 		natKey := vm.info.natKeyFor(port)
 		if _, ok := vm.info.NATRules()[natKey]; ok {
@@ -567,7 +568,7 @@ func (vm *Vm) NotExistingOrDown() bool {
 	return state == constants.State.Down || state == constants.State.NotExisting
 }
 
-func (vm *Vm) InstanceInfo(ctx context.Context) (*provider.InstanceInfo, error) {
+func (vm *Vm) InstanceInfo(ctx context.Context) (*provider.InstanceInfo, *cmd.XbeeError) {
 	var ip string
 	if vm.info.State() == constants.State.Up {
 		out, err := vm.Vbox().GetProperty(ctx, "/VirtualBox/GuestInfo/Net/1/V4/IP")

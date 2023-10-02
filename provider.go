@@ -2,7 +2,7 @@ package virtualbox
 
 import (
 	"context"
-	"fmt"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/constants"
 	"github.com/iodasolutions/xbee-common/log2"
 	"github.com/iodasolutions/xbee-common/provider"
@@ -15,7 +15,7 @@ import (
 type Provider struct {
 }
 
-func (pv Provider) Up() (*provider.InitialStatus, error) {
+func (pv Provider) Up() (*provider.InitialStatus, *cmd.XbeeError) {
 	ctx := context.Background()
 	vms := VmsFrom(ctx)
 	downOrNotExisting, other := vms.NotExistingOrDown()
@@ -69,7 +69,7 @@ func (pv Provider) Up() (*provider.InitialStatus, error) {
 			for {
 				counter++
 				if counter == 255 {
-					return nil, fmt.Errorf("exceeded max number possible ip for network")
+					return nil, cmd.Error("exceeded max number possible ip for network")
 				}
 				if _, ok := ips[counter]; !ok {
 					break
@@ -117,7 +117,7 @@ func (pv Provider) Up() (*provider.InitialStatus, error) {
 	return status, nil
 }
 
-func (pv Provider) Delete() error {
+func (pv Provider) Delete() *cmd.XbeeError {
 	ctx := context.Background()
 	vms := VmsFrom(ctx)
 	existing, notExisting := vms.Existing()
@@ -131,7 +131,7 @@ func (pv Provider) Delete() error {
 	return util.Execute(ctx, list...)
 }
 
-func (pv Provider) InstanceInfos() (map[string]*provider.InstanceInfo, error) {
+func (pv Provider) InstanceInfos() (map[string]*provider.InstanceInfo, *cmd.XbeeError) {
 	ctx := context.Background()
 	vms := VmsFrom(ctx)
 	result := map[string]*provider.InstanceInfo{}

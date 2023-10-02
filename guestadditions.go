@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/iodasolutions/virtualbox/properties"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/net2"
 	"github.com/iodasolutions/xbee-common/template"
-	"github.com/iodasolutions/xbee-common/util"
 	"os/exec"
 	"unicode"
 )
@@ -60,7 +60,7 @@ else
 fi
 `
 
-func DownloadAndAttachGuestAdditions(ctx context.Context, vmName string) *util.XbeeError {
+func DownloadAndAttachGuestAdditions(ctx context.Context, vmName string) *cmd.XbeeError {
 	vboxVersion := Version()
 	url := fmt.Sprintf("https://download.virtualbox.org/virtualbox/%[1]s/VBoxGuestAdditions_%[1]s.iso", vboxVersion)
 	if cachedFile, err := net2.DownloadIfNotCached(ctx, url); err != nil {
@@ -71,16 +71,16 @@ func DownloadAndAttachGuestAdditions(ctx context.Context, vmName string) *util.X
 	}
 }
 
-func DetachGuestAdditions(ctx context.Context, vmName string) *util.XbeeError {
+func DetachGuestAdditions(ctx context.Context, vmName string) *cmd.XbeeError {
 	vb := VboxFrom(vmName)
 	return vb.detachDvdStorage(ctx, "1")
 }
 
 func Version() string {
-	cmd := exec.Command(properties.VboxPath(), "--version")
-	out, err := cmd.Output()
+	aCmd := exec.Command(properties.VboxPath(), "--version")
+	out, err := aCmd.Output()
 	if err != nil {
-		panic(util.Error("unexpected error while running %s --version : %v", properties.VboxPath(), err))
+		panic(cmd.Error("unexpected error while running %s --version : %v", properties.VboxPath(), err))
 	}
 	extendedVersion := string(out)
 	return extractVersion(extendedVersion)
@@ -101,7 +101,7 @@ func GuestAdditionScript() string {
 	}
 	w := &bytes.Buffer{}
 	if err := template.OutputWithTemplate(installAdditions, w, model, nil); err != nil {
-		panic(util.Error("failed to parse userData template : %v", err))
+		panic(cmd.Error("failed to parse userData template : %v", err))
 	}
 	return w.String()
 }

@@ -1,10 +1,10 @@
 package properties
 
 import (
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/exec2"
 	"github.com/iodasolutions/xbee-common/newfs"
 	"github.com/iodasolutions/xbee-common/stringutils"
-	"github.com/iodasolutions/xbee-common/util"
 	"strings"
 	"sync"
 )
@@ -48,6 +48,6 @@ func fromSystem(key string) string {
 	if value, ok := system.properties[key]; ok {
 		return value
 	} else {
-		panic(util.Error("no virtualbox global system property %s", key))
+		panic(cmd.Error("no virtualbox global system property %s", key))
 	}
 }

@@ -3,8 +3,8 @@ package virtualbox
 import (
 	"context"
 	"fmt"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/provider"
-	"github.com/iodasolutions/xbee-common/util"
 	"strconv"
 	"strings"
 )
@@ -41,7 +41,7 @@ func (ds *DhcpServers) nextAvailableIndex() string {
 	return ""
 }
 
-func (ds *DhcpServers) CreateNewDhcpIfNecessary(ctx context.Context) (string, *util.XbeeError) {
+func (ds *DhcpServers) CreateNewDhcpIfNecessary(ctx context.Context) (string, *cmd.XbeeError) {
 	xbeenetName := DefaultNet()
 	if !ds.HasName(xbeenetName) {
 		ind := ds.nextAvailableIndex()
@@ -67,7 +67,7 @@ func (ds *DhcpServers) CreateNewDhcpIfNecessary(ctx context.Context) (string, *u
 	return xbeenetName, nil
 }
 
-func EnsureXbeenetExist(ctx context.Context) (string, *util.XbeeError) {
+func EnsureXbeenetExist(ctx context.Context) (string, *cmd.XbeeError) {
 	vboxLock.Lock()
 	defer vboxLock.Unlock()
 	dhcps, err := NewDhcpServers(ctx)
@@ -90,7 +90,7 @@ func EnsureXbeenetDeleted(ctx context.Context) error {
 	return nil
 }
 
-func NewDhcpServers(ctx context.Context) (result *DhcpServers, err *util.XbeeError) {
+func NewDhcpServers(ctx context.Context) (result *DhcpServers, err *cmd.XbeeError) {
 	result = &DhcpServers{
 		byName:  map[string]*DhcpServer{},
 		byIndex: map[int]*DhcpServer{},

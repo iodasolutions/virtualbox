@@ -2,6 +2,7 @@ package virtualbox
 
 import (
 	"context"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/log2"
 	"github.com/iodasolutions/xbee-common/provider"
 )
@@ -9,7 +10,7 @@ import (
 type Admin struct {
 }
 
-func (a Admin) DestroyVolumes(names []string) error {
+func (a Admin) DestroyVolumes(names []string) *cmd.XbeeError {
 	log2.Infof("destroy volumes %v ...", names)
 	volumes := provider.VolumesFromEnvironment(names)
 	ctx := context.Background()

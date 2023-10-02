@@ -3,12 +3,12 @@ module github.com/iodasolutions/virtualbox
 go 1.21.1
 
 require (
-	github.com/iodasolutions/xbee-common v0.0.0-20231001200208-6c3a358557ef
+	github.com/iodasolutions/xbee-common v0.0.0-20231002163728-adb16c8ae6d4
 	github.com/kdomanski/iso9660 v0.4.0
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.1 // indirect
+	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/dsnet/compress v0.0.2-0.20210315054119-f66993602bf5 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect

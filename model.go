@@ -3,6 +3,7 @@ package virtualbox
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/iodasolutions/xbee-common/cmd"
 	"github.com/iodasolutions/xbee-common/newfs"
 	"github.com/iodasolutions/xbee-common/util"
 )
@@ -31,7 +32,7 @@ func (m *Model) File() newfs.File {
 
 func (m *Model) ToBytes() []byte {
 	if data, err := json.Marshal(m); err != nil {
-		panic(util.Error("unable to serialize provider model : %v", err))
+		panic(cmd.Error("unable to serialize provider model : %v", err))
 	} else {
 		return data
 	}
