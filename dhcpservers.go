@@ -24,8 +24,7 @@ type DhcpServers struct {
 }
 
 func DefaultNet() string {
-	anId := provider.EnvId()
-	return fmt.Sprintf("default_%s", anId.NameVersion())
+	return fmt.Sprintf("default_%s", provider.EnvId())
 }
 
 func (ds *DhcpServers) HasName(name string) bool {

@@ -1,0 +1,32 @@
+wget https://ubuntu.com/download/server/thank-you?version=24.04.1&architecture=amd64&lts=true
+VBoxManage createvm --name "Ubuntu2404VM" --ostype Ubuntu_64 --register
+output:
+Virtual machine 'Ubuntu2404VM' is created and registered.
+UUID: 2277fc67-4d19-4641-8f82-bcd4d6e3f48d
+Settings file: '/home/eric/VirtualBox VMs/Ubuntu2404VM/Ubuntu2404VM.vbox'
+
+VBoxManage modifyvm "Ubuntu2404VM" --memory 4096 --cpus 2
+VBoxManage modifyvm "Ubuntu2404VM" --firmware efi
+VBoxManage createmedium disk --filename ~/VirtualBox\ VMs/Ubuntu2404VM/Ubuntu2404VM.vdi --size 20480
+VBoxManage storagectl "Ubuntu2404VM" --name "SATA Controller" --add sata --controller IntelAhci
+VBoxManage storageattach "Ubuntu2404VM" --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium ~/VirtualBox\ VMs/Ubuntu2404VM/Ubuntu2404VM.vdi
+VBoxManage storagectl "Ubuntu2404VM" --name "IDE Controller" --add ide
+VBoxManage storageattach "Ubuntu2404VM" --storagectl "IDE Controller" --port 0 --device 0 --type dvddrive --medium ~/Téléchargements/ubuntu-24.04.1-live-server-amd64.iso
+VBoxManage modifyvm "Ubuntu2404VM" --nic1 nat
+#VBoxManage startvm "Ubuntu2404VM" --type headless
+
+
+sudo dd if=/dev/zero of=/fichier_vides bs=1M
+sudo rm /fichier_vides
+
+
+
+
+Signer manuellement des modules kernel:
+openssl req -new -x509 -newkey rsa:2048 -keyout MOK.key -outform DER -out MOK.crt -nodes -days 3650 -subj "/CN=VirtualBox/"
+sudo mokutil --import MOK.crt
+
+#sudo mokutil --list-enrolled
+
+
+

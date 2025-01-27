@@ -19,12 +19,12 @@ type VboxVolume struct {
 	Device string
 }
 
-func VboxVolumeFrom(vol *provider.Volume) *VboxVolume {
+func VboxVolumeFrom(vol *provider.XbeeVolume) *VboxVolume {
 	result := &VboxVolume{}
-	if result.Location == "" {
-		result.Location = newfs.XbeeIntern().VolumesFolder()
+	if result.Location.String() == "" {
+		result.Location = newfs.Volumes()
 	} else {
-		result.Location = newfs.Folder(newfs.CWD().ResolvePath(result.Location.String()))
+		result.Location = newfs.NewFolder(newfs.CWD().ResolvePath(result.Location.String()))
 	}
 	if result.Format == "" {
 		result.Format = "VDI"

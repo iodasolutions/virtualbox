@@ -71,25 +71,26 @@ func (iso *Iso) CreateAndAttach(ctx context.Context) *cmd.XbeeError {
 	if err := template.Output(&t2, aMap, nil); err != nil {
 		return cmd.Error("cannot parse template userdata: %v", err)
 	}
-	writer, err := iso9660.NewWriter()
-	if err != nil {
-		return cmd.Error("failed to create writer: %s", err)
+	writer, err2 := iso9660.NewWriter()
+	if err2 != nil {
+		return cmd.Error("failed to create writer: %s", err2)
 	}
 	defer writer.Cleanup()
-	err = writer.AddFile(strings.NewReader(t1), "meta-data")
-	if err != nil {
-		panic(cmd.Error("failed to add file: %s", err))
-	}
 
-	err = writer.AddFile(strings.NewReader(t2), "user-data")
-	if err != nil {
-		panic(cmd.Error("failed to add file: %s", err))
+	if err3 := writer.AddFile(strings.NewReader(t1), "meta-data"); err3 != nil {
+		panic(cmd.Error("failed to add file: %s", err3))
+	}
+	if err3 := writer.AddFile(strings.NewReader(t2), "user-data"); err3 != nil {
+		panic(cmd.Error("failed to add file: %s", err3))
 	}
 	isoFile := iso.File()
-	fd := isoFile.OpenFileForCreation()
-	defer fd.Close()
-	err = writer.WriteTo(fd, "cidata")
+	fd, err := isoFile.OpenFileForCreation()
 	if err != nil {
+		return cmd.Error("failed to open file: %s", err)
+	}
+	defer fd.Close()
+	
+	if err3 := writer.WriteTo(fd, "cidata"); err3 != nil {
 		panic(cmd.Error("failed to write ISO image: %s", err))
 	}
 	vb := VboxFrom(iso.vm.Name())

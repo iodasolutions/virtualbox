@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/iodasolutions/virtualbox/properties"
 	"github.com/iodasolutions/xbee-common/cmd"
-	"github.com/iodasolutions/xbee-common/net2"
 	"github.com/iodasolutions/xbee-common/template"
 	"os/exec"
 	"unicode"
@@ -63,7 +62,7 @@ fi
 func DownloadAndAttachGuestAdditions(ctx context.Context, vmName string) *cmd.XbeeError {
 	vboxVersion := Version()
 	url := fmt.Sprintf("https://download.virtualbox.org/virtualbox/%[1]s/VBoxGuestAdditions_%[1]s.iso", vboxVersion)
-	if cachedFile, err := net2.DownloadIfNotCached(ctx, url); err != nil {
+	if cachedFile, err := DownloadIfNotCached(ctx, url); err != nil {
 		return err
 	} else {
 		vb := VboxFrom(vmName)

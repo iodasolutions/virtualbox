@@ -1,0 +1,1 @@
+vboxmanage showvminfo a_test-virtualbox-b6ddd5d83b --machinereadable

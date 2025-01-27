@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"github.com/iodasolutions/xbee-common/cmd"
-	"github.com/iodasolutions/xbee-common/exec2"
 	"github.com/iodasolutions/xbee-common/template"
 )
 
@@ -37,11 +36,7 @@ func networkScript(index int) string {
 }
 
 func (vm *Vm) configureNetwork(ctx context.Context, index int) error {
-	client, err := exec2.Connect("127.0.0.1", vm.sshPort, vm.User)
-	if err != nil {
-		return err
-	}
-	if err := client.RunScript(networkScript(index)); err != nil {
+	if err := vm.conn.RunScript(networkScript(index)); err != nil {
 		return err
 	}
 	if _, err := vm.InternalIp(ctx); err != nil {
