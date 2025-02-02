@@ -14,37 +14,22 @@ import (
 var installAdditions = `#!/bin/bash
 set -e
 set -x 
-install_guest () {
+function install_guest() {
 
+apt update
+apt install -y build-essential dkms linux-headers-$(uname -r)
+mkdir -p /mnt/vbox
+mount /dev/sr1 /mnt/vbox
+set +e
+#cette commande retourne un code error 2
+/mnt/vbox/VBoxLinuxAdditions.run --nox11
+set -e
+apt-get purge -y build-essential
+apt-get autoremove -y
+umount /dev/sr1
+rm -rf /mnt/vbox
+echo {{ .version }} > /var/xbee/vbox_version
 
-	if [ -f /etc/os-release ]; then
-		. /etc/os-release
-		if [ "$NAME" == "Ubuntu" ]; then
-			#otherwise VBoxClient crash
-			apt-get update
-			apt-get install -y libxt6 libxmu6 bzip2
-			apt-get install -y build-essential gcc make perl dkms
-		fi
-	fi
-	mkdir -p /mnt/vbox
-	mount /dev/sr1 /mnt/vbox
-	set +e
-	# following command always has exit 2
-	sh /mnt/vbox/VBoxLinuxAdditions.run --nox11
-	set -e
-	if [ -f /etc/os-release ]; then
-		. /etc/os-release
-		if [ "$NAME" == "Ubuntu" ]; then
-			if [ "${VERSION_ID}" == "18.04" ]; then
-				apt-get purge -y build-essential
-				apt-get autoremove -y
-			fi
-		fi
-	fi
-	umount /dev/sr1
-	rm -rf /mnt/vbox
-	echo {{ .version }} > /var/xbee/vbox_version
-    touch /var/xbee/restart
 
 }
 

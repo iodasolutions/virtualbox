@@ -14,6 +14,9 @@ type Provider struct {
 func (pv Provider) Up() ([]*provider.InstanceInfo, *cmd.XbeeError) {
 	ctx := context.Background()
 	vms := VmsFrom(ctx)
+	if err := EnsureXbeenetExist(ctx); err != nil {
+		return nil, err
+	}
 	downOrNotExisting, other := vms.NotExistingOrDown()
 	for _, vm := range other {
 		log2.Warnf("host %s is in state %s", vm.HostName, vm.info.State())
@@ -125,7 +128,11 @@ func (pv Provider) Delete() *cmd.XbeeError {
 	for _, vm := range existing {
 		list = append(list, vm.Destroy)
 	}
-	return util.Execute(ctx, list...)
+	err := util.Execute(ctx, list...)
+	if err != nil {
+		return err
+	}
+	return EnsureXbeenetDeleted(ctx)
 }
 
 func (pv Provider) InstanceInfos() ([]*provider.InstanceInfo, *cmd.XbeeError) {
@@ -143,5 +150,16 @@ func (pv Provider) InstanceInfos() ([]*provider.InstanceInfo, *cmd.XbeeError) {
 }
 
 func (pv Provider) Image() *cmd.XbeeError {
+	ctx := context.Background()
+	vms := VmsFrom(ctx)
+	var list []util.Executor
+	for _, vm := range vms {
+		list = append(list, vm.ExportToVmdk)
+	}
+	err := util.Execute(ctx, list...)
+	if err != nil {
+		return err
+	}
+	log2.Infof("Export SUCCESSFULL")
 	return nil
 }

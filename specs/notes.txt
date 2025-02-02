@@ -1,1 +1,23 @@
 vboxmanage showvminfo a_test-virtualbox-b6ddd5d83b --machinereadable
+
+VBoxManage clonemedium disk <chemin_du_disque_parent.vmdk> <chemin_du_nouveau_disque.vmdk>
+
+VBoxManage createhd --filename /tmp/mydisc.vdi --format VDI --variant Standard --diffparent /home/eric/.xbee/cache-artefacts/cloud-images.ubuntu.com/noble/20250122/noble-server-cloudimg-amd64.vmdk
+
+
+
+Détacher un disque de virtualbox
+VBoxManage closemedium disk /home/eric/.xbee/cache-artefacts/cloud-images.ubuntu.com/noble/20250122/noble-server-cloudimg-amd64.vmdk
+Attention; --delete supprime le fichier
+
+
+Ajouter un disque:
+VBoxManage openmedium disk /home/eric/.xbee/cache-artefacts/cloud-images.ubuntu.com/noble/20250122/noble-server-cloudimg-amd64.vmdk
+
+VBoxManage list dhcpservers
+VBoxManage natnetwork add --netname "default_xbee-system-packs-b6ddd5d83b" --network "192.168.99.0/24" --enable
+VBoxManage dhcpserver add --netname "default_xbee-system-packs-b6ddd5d83b" --ip 192.168.99.1 --netmask 255.255.255.0 --lowerip 192.168.99.100 --upperip 192.168.99.200 --enable
+
+VBoxManage natnetwork modify --netname "default_xbee-system-packs-b6ddd5d83b" --disable
+VBoxManage natnetwork remove --netname "default_xbee-system-packs-b6ddd5d83b"
+

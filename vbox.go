@@ -54,19 +54,6 @@ func (vbox *Vbox) showVmInfo(ctx context.Context) (string, *cmd.XbeeError) {
 	return vbox.execute(ctx, "showvminfo", vbox.name, "--machinereadable")
 }
 
-func (vbox *Vbox) Create(ctx context.Context) *cmd.XbeeError {
-	_, err := vbox.execute(ctx, "createvm", "--name", vbox.name, "--register")
-	if err != nil {
-		return err
-	}
-	_, err = vbox.execute(ctx, "storagectl", vbox.name, "--name", "SATA", "--add", "sata")
-	if err != nil {
-		return err
-	}
-	_, err = vbox.execute(ctx, "storagectl", vbox.name, "--name", "IDE", "--add", "IDE")
-	return err
-}
-
 func (vbox *Vbox) Modify(ctx context.Context, args ...string) *cmd.XbeeError {
 	args = append([]string{"modifyvm", vbox.name}, args...)
 	_, err := vbox.execute(ctx, args...)
@@ -128,11 +115,6 @@ func (vbox *Vbox) Import(ctx context.Context, ovf newfs.File) *cmd.XbeeError {
 	return err
 }
 
-func (vbox *Vbox) Export(ctx context.Context, ovf newfs.File) *cmd.XbeeError {
-	_, err := vbox.execute(ctx, "export", vbox.name, "-o", ovf.String())
-	return err
-}
-
 func (vbox *Vbox) GetProperty(ctx context.Context, name string) (string, *cmd.XbeeError) {
 	return vbox.execute(ctx, "guestproperty", "get", vbox.name, name)
 }
@@ -144,6 +126,19 @@ func (vbox *Vbox) removeDhcpServer(ctx context.Context, xbeenetName string) *cmd
 		"--netname", xbeenetName)
 	return err
 }
+
+func (vbox *Vbox) remoteIntNet(ctx context.Context) *cmd.XbeeError {
+	if _, err := vbox.execute(ctx, "natnetwork", "modify",
+		"--netname", DefaultNet(), "--disable"); err != nil {
+		return err
+	}
+	if _, err := vbox.execute(ctx, "natnetwork", "remove",
+		"--netname", DefaultNet()); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (vbox *Vbox) attacheDvdStorage(ctx context.Context, f newfs.File, device string) *cmd.XbeeError {
 	_, err := vbox.execute(ctx, "storageattach", vbox.name,
 		"--type", "dvddrive",
@@ -171,4 +166,14 @@ func (vbox *Vbox) detachDvdStorage(ctx context.Context, device string) *cmd.Xbee
 		"--device", device,
 		"--medium", "none")
 	return err
+}
+
+func (vbox *Vbox) cloneMedium(ctx context.Context, source newfs.File, target newfs.File) *cmd.XbeeError {
+	if _, err := vbox.execute(ctx, "clonemedium", "disk", source.String(), target.String()); err != nil {
+		return err
+	}
+	if _, err := vbox.execute(ctx, "closemedium", "disk", source.String()); err != nil {
+		return err
+	}
+	return nil
 }

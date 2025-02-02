@@ -38,3 +38,10 @@ func NewHost(host *provider.XbeeHost) (*Host, *cmd.XbeeError) {
 	result.OsType = mapData["ostype"].(string)
 	return &Host{XbeeHost: host, Specification: &result}, nil
 }
+
+func (h *Host) EffectiveDisk() newfs.File {
+	return ExportFolder().ChildFile(h.EffectiveHash() + ".vmdk")
+}
+func (h *Host) SystemDisk() newfs.File {
+	return ExportFolder().ChildFile(h.SystemHash + ".vmdk")
+}

@@ -40,10 +40,15 @@ func (ds *DhcpServers) nextAvailableIndex() string {
 	return ""
 }
 
-func (ds *DhcpServers) CreateNewDhcpIfNecessary(ctx context.Context) (string, *cmd.XbeeError) {
+func (ds *DhcpServers) CreateNewDhcpIfNecessary(ctx context.Context) *cmd.XbeeError {
 	xbeenetName := DefaultNet()
 	if !ds.HasName(xbeenetName) {
 		ind := ds.nextAvailableIndex()
+		//VBoxManage natnetwork add --netname "InternalNet" --network "192.168.100.0/24" --enable
+		if _, err := VboxFrom("").execute(ctx, "natnetwork",
+			"add", "--netname", xbeenetName, "--network", fmt.Sprintf("192.168.%s.0/24", ind), "--enable"); err != nil {
+			return err
+		}
 		d := &DhcpServer{
 			NetworkName:    xbeenetName,
 			IP:             fmt.Sprintf("192.168.%s.1", ind),
@@ -60,31 +65,34 @@ func (ds *DhcpServers) CreateNewDhcpIfNecessary(ctx context.Context) (string, *c
 			"--upperip", d.UpperIPAddress,
 			"--enable")
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
-	return xbeenetName, nil
+	return nil
 }
 
-func EnsureXbeenetExist(ctx context.Context) (string, *cmd.XbeeError) {
-	vboxLock.Lock()
-	defer vboxLock.Unlock()
-	dhcps, err := NewDhcpServers(ctx)
-	if err != nil {
-		return "", err
-	}
-	return dhcps.CreateNewDhcpIfNecessary(ctx)
-}
-func EnsureXbeenetDeleted(ctx context.Context) error {
+func EnsureXbeenetExist(ctx context.Context) *cmd.XbeeError {
 	vboxLock.Lock()
 	defer vboxLock.Unlock()
 	dhcps, err := NewDhcpServers(ctx)
 	if err != nil {
 		return err
 	}
+	return dhcps.CreateNewDhcpIfNecessary(ctx)
+}
+func EnsureXbeenetDeleted(ctx context.Context) *cmd.XbeeError {
+	dhcps, err := NewDhcpServers(ctx)
+	if err != nil {
+		return err
+	}
 	xbeenetName := DefaultNet()
 	if dhcps.HasName(xbeenetName) {
-		return VboxFrom("").removeDhcpServer(ctx, xbeenetName)
+		if err := VboxFrom("").removeDhcpServer(ctx, xbeenetName); err != nil {
+			return err
+		}
+		if err := VboxFrom("").remoteIntNet(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }

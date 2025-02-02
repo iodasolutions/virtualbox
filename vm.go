@@ -127,6 +127,10 @@ func (vm *Vm) Name() string {
 	return fmt.Sprintf("%s_%s", vm.HostName, provider.EnvId())
 }
 
+func (vm *Vm) Folder() newfs.Folder {
+	return properties.VmFolder(vm.Name())
+}
+
 func (vm *Vm) SSHPort() string {
 	if vm.sshPort == "" {
 		vm.sshPort = vm.info.HostPorts()
@@ -155,7 +159,12 @@ func (vm *Vm) Destroy(ctx context.Context) *cmd.XbeeError {
 	if err := vm.Vbox().Unregister(ctx); err != nil {
 		return err
 	}
-	properties.VmFolder(vm.Name()).Delete()
+	if err := vm.Vbox().RemoveMedium(ctx, vm.VirtualDisk()); err != nil {
+		return err
+	}
+	if err := vm.Folder().Delete(); err != nil {
+		return err
+	}
 	log2.Infof("...vm removed")
 	return nil
 }
@@ -203,6 +212,11 @@ func extractVmdk(aPath newfs.File) (newfs.File, *cmd.XbeeError) {
 	}
 }
 
+func (vm *Vm) VirtualDisk() newfs.File {
+	origin := newfs.NewFile(vm.Host.Specification.Disk)
+	return vm.Folder().ChildFile(origin.Base())
+}
+
 func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 	log2.Infof("%s : Host does not exist, first create it", vm.HostName)
 	var originDisk newfs.File
@@ -215,10 +229,22 @@ func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 	if err != nil {
 		return
 	}
+	vmdk.CopyToPath(vm.VirtualDisk())
 	vb := vm.Vbox()
-	if err = vb.Create(ctx); err != nil {
-		return
+	clonedVmdk := vm.VirtualDisk()
+	_, err = vb.execute(ctx, "createvm", "--name", vm.Name(), "--ostype", vm.Host.Specification.OsType, "--register")
+	if err != nil {
+		return err
 	}
+	_, err = vb.execute(ctx, "storagectl", vm.Name(), "--name", "SATA", "--add", "sata")
+	if err != nil {
+		return err
+	}
+	_, err = vb.execute(ctx, "storagectl", vm.Name(), "--name", "IDE", "--add", "IDE")
+	if err != nil {
+		return err
+	}
+
 	if err = vb.Modify(ctx, "--boot1", "disk"); err != nil {
 		return
 	}
@@ -230,7 +256,7 @@ func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 	if err = DownloadAndAttachGuestAdditions(ctx, vm.Name()); err != nil {
 		return
 	}
-	if err = vb.attachHddStorage(ctx, vmdk, "0"); err != nil {
+	if err = vb.attachHddStorage(ctx, clonedVmdk, "0"); err != nil {
 		return
 	}
 	log2.Infof("guest addition downloaded and  attached")
@@ -245,11 +271,10 @@ func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 		return
 	}
 	log2.Infof("%s : cloud-init boot finished", vm.HostName)
-	// PB with VB 7.0.8
-	//if err = vm.conn.RunScript(GuestAdditionScript()); err != nil {
-	//	return
-	//}
-	//log2.Infof("%s : guest addition installed", vm.HostName)
+	if err = vm.conn.RunScript(GuestAdditionScript()); err != nil {
+		return
+	}
+	log2.Infof("%s : guest addition installed", vm.HostName)
 	//if needRestart(client) {
 	//	log3.Infof("%s : need restart", vm.HostName)
 	//	if err = vm.cleanCloudInitAndHalt(client); err != nil {
@@ -335,30 +360,14 @@ func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 	return nil
 }
 
-func (vm *Vm) ExportToVmdk(ctx context.Context) error {
-	tmpDir := newfs.TmpDir().RandomChildFolder()
-	tmpDir.EnsureExists()
-	defer tmpDir.Delete()
-	ovfPath := tmpDir.ChildFile("image.ovf")
-	log2.Infof("Export vm %s to [%s]...", vm.HostName, ovfPath)
-	if err := vm.Vbox().Export(ctx, ovfPath); err != nil {
-		return err
-	}
-	vmdks := tmpDir.ChildrenFilesEndingWith(".vmdk")
-	if len(vmdks) != 1 {
-		panic(cmd.Error("expects one vmdk file in folder %s, actual is %d", tmpDir, len(vmdks)))
-	}
-	vmdk := vmdks[0]
-	vmdk.CopyToPath(vm.Host.Specification.File())
-	log2.Infof("Export SUCCESSFULL")
+func (vm *Vm) ExportToVmdk(ctx context.Context) *cmd.XbeeError {
+	vmdkPath := vm.Host.EffectiveDisk()
+	log2.Infof("Export vm %s to [%s]...", vm.HostName, vmdkPath)
+	vm.VirtualDisk().CopyToPath(vm.Host.EffectiveDisk())
 	return nil
 }
 
 func (vm *Vm) configureNic(ctx context.Context) *cmd.XbeeError {
-	subnet, err := EnsureXbeenetExist(ctx)
-	if err != nil {
-		return err
-	}
 	vb := vm.Vbox()
 	if err := vb.Modify(ctx, "--nic1", "nat"); err != nil {
 		return err
@@ -366,7 +375,7 @@ func (vm *Vm) configureNic(ctx context.Context) *cmd.XbeeError {
 	if err := vb.Modify(ctx, "--nic2", "intnet"); err != nil {
 		return err
 	}
-	return vb.Modify(ctx, "--intnet2", subnet)
+	return vb.Modify(ctx, "--intnet2", DefaultNet())
 }
 
 func (vm *Vm) Start(ctx context.Context) *cmd.XbeeError {
@@ -478,9 +487,6 @@ func (vm *Vm) configureSharedPorts(ctx context.Context) (err *cmd.XbeeError) {
 	if err = vm.assignSSHPortFromHost(ctx); err != nil {
 		return
 	}
-	if err != nil {
-		return
-	}
 	return vm.ExposePorts(ctx, vm.Ports)
 }
 
@@ -575,12 +581,14 @@ func (vm *Vm) InstanceInfo(ctx context.Context) (*provider.InstanceInfo, *cmd.Xb
 		ip = extraValueFrom(out)
 	}
 	return &provider.InstanceInfo{
-		Name:       vm.HostName,
-		State:      vm.info.State(),
-		ExternalIp: "127.0.0.1",
-		SSHPort:    vm.SSHPort(),
-		Ip:         ip,
-		User:       vm.User,
+		Name:          vm.HostName,
+		State:         vm.info.State(),
+		ExternalIp:    "127.0.0.1",
+		SSHPort:       vm.SSHPort(),
+		Ip:            ip,
+		User:          vm.User,
+		PackIdExist:   vm.Host.EffectiveDisk().Exists(),
+		SystemIdExist: vm.Host.SystemDisk().Exists(),
 	}, nil
 }
 
