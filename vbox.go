@@ -177,3 +177,18 @@ func (vbox *Vbox) cloneMedium(ctx context.Context, source newfs.File, target new
 	}
 	return nil
 }
+
+func (vbox *Vbox) export(ctx context.Context) (*newfs.File, *cmd.XbeeError) {
+	//VBoxManage export "ubuntu-24.04-458d73ae7c_xbee-system-packs-b6ddd5d83b" --output /tmp/vm_export.ova
+	ovafile := newfs.TmpDir().ChildFile(vbox.name + ".ova")
+	defer ovafile.EnsureDelete()
+	if _, err := vbox.execute(ctx, "export", vbox.name, "--output", ovafile.String()); err != nil {
+		return nil, err
+	}
+	targetDir := newfs.TmpDir().ChildFolder(vbox.name)
+	if err := ovafile.Untar(targetDir.String()); err != nil {
+		return nil, err
+	}
+	vmdk := targetDir.ChildrenFilesEndingWith(".vmdk")[0]
+	return &vmdk, nil
+}

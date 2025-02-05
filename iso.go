@@ -47,9 +47,11 @@ func IsoFor(vm *Vm) *Iso {
 func (iso *Iso) authorizedKeyScript() string {
 	script := `#!/bin/bash
 {{ .authorized }}
+{{ .bootstrap }}
 `
 	model := map[string]interface{}{
 		"authorized": provider.AuthorizedKeyScript(iso.vm.User),
+		"bootstrap":  iso.vm.Host.Specification.Bootstrap,
 	}
 	w := &bytes.Buffer{}
 	if err := template.OutputWithTemplate(script, w, model, nil); err != nil {
@@ -89,7 +91,7 @@ func (iso *Iso) CreateAndAttach(ctx context.Context) *cmd.XbeeError {
 		return cmd.Error("failed to open file: %s", err)
 	}
 	defer fd.Close()
-	
+
 	if err3 := writer.WriteTo(fd, "cidata"); err3 != nil {
 		panic(cmd.Error("failed to write ISO image: %s", err))
 	}

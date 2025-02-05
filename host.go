@@ -9,10 +9,11 @@ import (
 )
 
 type VboxHostData struct {
-	Cpus   int    `json:"cpus,omitempty"`
-	Memory int    `json:"memory,omitempty"`
-	Disk   string `json:"disk,omitempty"`
-	OsType string `json:"ostype,omitempty"`
+	Cpus      int    `json:"cpus,omitempty"`
+	Memory    int    `json:"memory,omitempty"`
+	Disk      string `json:"disk,omitempty"`
+	OsType    string `json:"ostype,omitempty"`
+	Bootstrap string `json:"cloud-init,omitempty"`
 }
 
 func (m *VboxHostData) File() newfs.File {
@@ -36,6 +37,7 @@ func NewHost(host *provider.XbeeHost) (*Host, *cmd.XbeeError) {
 	mapData := provider.SystemProviderDataFor(host.SystemHash)
 	result.Disk = mapData["disk"].(string)
 	result.OsType = mapData["ostype"].(string)
+	result.Bootstrap = mapData["cloud-init"].(string)
 	return &Host{XbeeHost: host, Specification: &result}, nil
 }
 

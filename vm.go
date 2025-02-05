@@ -216,20 +216,25 @@ func (vm *Vm) VirtualDisk() newfs.File {
 	origin := newfs.NewFile(vm.Host.Specification.Disk)
 	return vm.Folder().ChildFile(origin.Base())
 }
+func (vm *Vm) ensureVmdkPresent(ctx context.Context) (newfs.File, *cmd.XbeeError) {
+	if vm.Host.EffectiveDisk().Exists() {
+		return vm.Host.EffectiveDisk(), nil
+	}
+	originDisk, err := DownloadIfNotCached(ctx, vm.Host.Specification.Disk)
+	if err != nil {
+		return newfs.NewFile(""), err
+	}
+	return extractVmdk(originDisk)
+}
 
 func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 	log2.Infof("%s : Host does not exist, first create it", vm.HostName)
-	var originDisk newfs.File
-	originDisk, err = DownloadIfNotCached(ctx, vm.Host.Specification.Disk)
+	var vmdkOrigin newfs.File
+	vmdkOrigin, err = vm.ensureVmdkPresent(ctx)
 	if err != nil {
-		return
+		return err
 	}
-	var vmdk newfs.File
-	vmdk, err = extractVmdk(originDisk)
-	if err != nil {
-		return
-	}
-	vmdk.CopyToPath(vm.VirtualDisk())
+	vmdkOrigin.CopyToPath(vm.VirtualDisk())
 	vb := vm.Vbox()
 	clonedVmdk := vm.VirtualDisk()
 	_, err = vb.execute(ctx, "createvm", "--name", vm.Name(), "--ostype", vm.Host.Specification.OsType, "--register")
@@ -271,10 +276,16 @@ func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 		return
 	}
 	log2.Infof("%s : cloud-init boot finished", vm.HostName)
-	if err = vm.conn.RunScript(GuestAdditionScript()); err != nil {
-		return
+	if !vm.Host.EffectiveDisk().Exists() {
+		if err = vm.conn.RunScript(GuestAdditionScript()); err != nil {
+			return
+		}
+		log2.Infof("%s : guest addition installed", vm.HostName)
+		if err := vm.conn.RunCommandQuiet("sudo cloud-init clean"); err != nil {
+			return err
+		}
 	}
-	log2.Infof("%s : guest addition installed", vm.HostName)
+
 	//if needRestart(client) {
 	//	log3.Infof("%s : need restart", vm.HostName)
 	//	if err = vm.cleanCloudInitAndHalt(client); err != nil {
@@ -318,28 +329,6 @@ func (vm *Vm) waitUntilCloudInitFinished() *cmd.XbeeError {
 	}
 	return util.Execute(ctx, ff)
 }
-func (vm *Vm) needRestart() bool {
-	out, _ := vm.conn.RunCommandToOut("if [ -f /var/xbee/restart ]; then echo 1; else echo 0; fi")
-	out = strings.TrimSpace(out)
-	return out == "1"
-}
-
-func (vm *Vm) cleanCloudInitAndHalt() error {
-	if err := vm.conn.RunCommandQuiet(fmt.Sprintf("rm -rf /home/%s/.ssh", vm.User)); err != nil {
-		return err
-	}
-	if err := vm.conn.RunCommandQuiet("rm -f /var/xbee/restart"); err != nil {
-		return err
-	}
-	if err := vm.conn.RunCommandQuiet("cloud-init clean"); err != nil {
-		return err
-	}
-	log2.Infof("halt host %s", vm.HostName)
-	if err := vm.conn.RunCommandQuiet("shutdown -h now"); err != nil {
-		log2.Infof("Lost connection to %s", vm.HostName)
-	}
-	return nil
-}
 
 func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 	log2.Infof("%s : wait until SSH open...", vm.HostName)
@@ -361,9 +350,16 @@ func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 }
 
 func (vm *Vm) ExportToVmdk(ctx context.Context) *cmd.XbeeError {
-	vmdkPath := vm.Host.EffectiveDisk()
+	vmdkPath, err := vm.Vbox().export(ctx)
+	if err != nil {
+		return err
+	}
+	defer vmdkPath.Dir().Delete()
 	log2.Infof("Export vm %s to [%s]...", vm.HostName, vmdkPath)
-	vm.VirtualDisk().CopyToPath(vm.Host.EffectiveDisk())
+	vm.Host.EffectiveDisk().Dir().EnsureExists()
+	if err := os.Rename(vmdkPath.String(), vm.Host.EffectiveDisk().String()); err != nil {
+		return cmd.Error("failed to move %s to %s", vmdkPath, vm.Host.EffectiveDisk().String())
+	}
 	return nil
 }
 
