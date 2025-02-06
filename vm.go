@@ -17,70 +17,6 @@ import (
 	"time"
 )
 
-type Vms []*Vm
-
-func VmsFrom(ctx context.Context) (result Vms) {
-	for vm := range vmGenerator(ctx) {
-		result = append(result, vm)
-	}
-	return
-}
-
-func (vms Vms) Names() (result []string) {
-	for _, vm := range vms {
-		result = append(result, vm.Name())
-	}
-	return
-}
-func (vms Vms) Existing() (result Vms, other Vms) {
-	for _, vm := range vms {
-		if vm.info.State() == constants.State.NotExisting {
-			other = append(other, vm)
-		} else {
-			result = append(result, vm)
-		}
-	}
-	return
-}
-
-func (vms Vms) NotExistingOrDown() (result Vms, other Vms) {
-	for _, vm := range vms {
-		if vm.NotExistingOrDown() {
-			result = append(result, vm)
-		} else {
-			other = append(other, vm)
-		}
-	}
-	return
-}
-
-func vmGenerator(ctx context.Context) <-chan *Vm {
-	vols := map[string]*VboxVolume{}
-	for _, vol := range provider.VolumesForEnv() {
-		vols[vol.Name] = VboxVolumeFrom(vol)
-	}
-	var channels []<-chan *Vm
-	for _, h := range provider.Hosts() {
-		ch := make(chan *Vm)
-		channels = append(channels, ch)
-		go func(h *provider.XbeeHost) {
-			defer close(ch)
-			var vm *Vm
-			vm, err := fromHost(ctx, h)
-			if err != nil {
-				log2.Errorf(err.Error())
-			} else {
-				vm.volumes = map[string]*VboxVolume{}
-				for _, name := range h.Volumes {
-					vm.volumes[name] = vols[name] // value can be nil
-				}
-				ch <- vm
-			}
-		}(h)
-	}
-	return util.Multiplex(ctx, channels...)
-}
-
 type Vm struct {
 	HostName string
 	User     string
@@ -94,8 +30,8 @@ type Vm struct {
 	info                 *vminfo
 	InitiallyNotExisting bool
 	InitiallyDown        bool
-
-	conn *ssh2.SSHClient // set by waitSSH
+	guestAddition        *newfs.File
+	conn                 *ssh2.SSHClient // set by waitSSH
 }
 
 func fromHost(ctx context.Context, h *provider.XbeeHost) (*Vm, error) {
@@ -114,12 +50,11 @@ func fromHost(ctx context.Context, h *provider.XbeeHost) (*Vm, error) {
 }
 
 func (vm *Vm) HaltInstance(ctx context.Context) *cmd.XbeeError {
-	log2.Infof("Shutdown request...")
 	vb := vm.Vbox()
 	if err := vb.Stop(ctx); err != nil {
 		return err
 	}
-	log2.Infof("...Shutdown succeeded")
+	log2.Infof("%s : Shutdown succeeded", vm.HostName)
 	return vm.DeleteNATRules(ctx)
 }
 
@@ -155,7 +90,6 @@ func (vm *Vm) Destroy(ctx context.Context) *cmd.XbeeError {
 	if err := vm.EnsureIsoDetached(ctx); err != nil {
 		return err
 	}
-	log2.Infof("Remove vm from virtualbox...")
 	if err := vm.Vbox().Unregister(ctx); err != nil {
 		return err
 	}
@@ -165,7 +99,7 @@ func (vm *Vm) Destroy(ctx context.Context) *cmd.XbeeError {
 	if err := vm.Folder().Delete(); err != nil {
 		return err
 	}
-	log2.Infof("...vm removed")
+	log2.Infof("%s : vm removed", vm.HostName)
 	return nil
 }
 
@@ -227,29 +161,30 @@ func (vm *Vm) ensureVmdkPresent(ctx context.Context) (newfs.File, *cmd.XbeeError
 	return extractVmdk(originDisk)
 }
 
-func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
-	log2.Infof("%s : Host does not exist, first create it", vm.HostName)
+func (vm *Vm) prepareForCreation(ctx context.Context) (err *cmd.XbeeError) {
 	var vmdkOrigin newfs.File
-	vmdkOrigin, err = vm.ensureVmdkPresent(ctx)
-	if err != nil {
-		return err
+	if vmdkOrigin, err = vm.ensureVmdkPresent(ctx); err != nil {
+		return
 	}
-	vmdkOrigin.CopyToPath(vm.VirtualDisk())
+	//	vmdkOrigin.CopyToPath(vm.VirtualDisk())
 	vb := vm.Vbox()
-	clonedVmdk := vm.VirtualDisk()
-	_, err = vb.execute(ctx, "createvm", "--name", vm.Name(), "--ostype", vm.Host.Specification.OsType, "--register")
-	if err != nil {
+	log2.Infof("Create disk %s", vm.VirtualDisk())
+	if err = vb.cloneMedium(ctx, vmdkOrigin, vm.VirtualDisk()); err != nil {
 		return err
 	}
-	_, err = vb.execute(ctx, "storagectl", vm.Name(), "--name", "SATA", "--add", "sata")
-	if err != nil {
+	if vm.guestAddition, err = EnsureGuestAdditions(ctx); err != nil {
+		return
+	}
+	log2.Infof("%s : Host does not exist, first create it", vm.HostName)
+	if _, err = vb.execute(ctx, "createvm", "--name", vm.Name(), "--ostype", vm.Host.Specification.OsType, "--register"); err != nil {
+		return
+	}
+	if _, err = vb.execute(ctx, "storagectl", vm.Name(), "--name", "SATA", "--add", "sata"); err != nil {
 		return err
 	}
-	_, err = vb.execute(ctx, "storagectl", vm.Name(), "--name", "IDE", "--add", "IDE")
-	if err != nil {
+	if _, err = vb.execute(ctx, "storagectl", vm.Name(), "--name", "IDE", "--add", "IDE"); err != nil {
 		return err
 	}
-
 	if err = vb.Modify(ctx, "--boot1", "disk"); err != nil {
 		return
 	}
@@ -257,61 +192,15 @@ func (vm *Vm) create(ctx context.Context) (err *cmd.XbeeError) {
 	if err = iso.CreateAndAttach(ctx); err != nil {
 		return
 	}
-	log2.Infof("cloud-init iso disk created and attached")
-	if err = DownloadAndAttachGuestAdditions(ctx, vm.Name()); err != nil {
+	if err = vb.attacheDvdStorage(ctx, *vm.guestAddition, "1"); err != nil {
 		return
 	}
-	if err = vb.attachHddStorage(ctx, clonedVmdk, "0"); err != nil {
+	if err = vb.attachHddStorage(ctx, vm.VirtualDisk(), "0"); err != nil {
 		return
 	}
-	log2.Infof("guest addition downloaded and  attached")
 	if err = vm.configureNic(ctx); err != nil {
 		return
 	}
-	err = vm.Start(ctx)
-	if err != nil {
-		return
-	}
-	if err = vm.waitUntilCloudInitFinished(); err != nil {
-		return
-	}
-	log2.Infof("%s : cloud-init boot finished", vm.HostName)
-	if !vm.Host.EffectiveDisk().Exists() {
-		if err = vm.conn.RunScript(GuestAdditionScript()); err != nil {
-			return
-		}
-		log2.Infof("%s : guest addition installed", vm.HostName)
-		if err := vm.conn.RunCommandQuiet("sudo cloud-init clean"); err != nil {
-			return err
-		}
-	}
-
-	//if needRestart(client) {
-	//	log3.Infof("%s : need restart", vm.HostName)
-	//	if err = vm.cleanCloudInitAndHalt(client); err != nil {
-	//		return
-	//	}
-	//	ff := func(_ context.Context) error {
-	//		for {
-	//			time.Sleep(time.Second)
-	//			vm.info = VmInfoFor(ctx, vm.Name())
-	//			if vm.info.State() == constants.State.Down {
-	//				return nil
-	//			}
-	//		}
-	//	}
-	//	if err = util.Execute(ctx, ff); err != nil {
-	//		return
-	//	}
-	//	if err = vm.ExportToVmdk(ctx); err != nil {
-	//		return
-	//	}
-	//	if err = vm.Destroy(ctx); err != nil {
-	//		return
-	//	}
-	//	vm.info = VmInfoFor(ctx, vm.Name())
-	//	return vm.create(ctx)
-	//}
 	return
 }
 
@@ -374,61 +263,28 @@ func (vm *Vm) configureNic(ctx context.Context) *cmd.XbeeError {
 	return vb.Modify(ctx, "--intnet2", DefaultNet())
 }
 
-func (vm *Vm) Start(ctx context.Context) *cmd.XbeeError {
-	if err := vm.ConfigureBeforeStart(ctx); err != nil {
-		return err
-	}
-	log2.Infof("Start vm...")
-	if err := vm.Vbox().Start(ctx); err != nil {
-		return err
-	}
-	vm.info = VmInfoFor(ctx, vm.Name())
-	return vm.waitSSH(ctx)
-}
-
-func (vm *Vm) Up(ctx context.Context) (err *cmd.XbeeError) {
-	if vm.info.State() == constants.State.NotExisting {
-		vm.InitiallyNotExisting = true
-		err = vm.create(ctx)
-		if err != nil {
-			return
-		}
-	} else {
-		vm.InitiallyDown = true
-		err = vm.Start(ctx)
-		if err != nil {
-			return
-		}
-	}
-	//defer func() {
-	//	err = util.CloseWithError(client.Close, err)
-	//}()
-	if err = vm.conn.RunCommand("sudo mkdir -p /root/.xbee/cache-artefacts && sudo mount -t vboxsf xbee /root/.xbee/cache-artefacts"); err != nil {
+func (vm *Vm) Start(ctx context.Context) (err *cmd.XbeeError) {
+	if err = vm.DeleteNATRules(ctx); err != nil {
 		return
 	}
-	log2.Infof("shared folder xbee mounted")
-	if vm.InitiallyNotExisting {
-		if err = vm.conn.RunCommand("sudo cp /root/.xbee/cache-artefacts/s3.eu-west-3.amazonaws.com/xbee.repository.public/linux_amd64/xbee /usr/bin"); err != nil {
-			return
-		}
+	if err = vm.EnsureXbeeSharedFolder(ctx); err != nil {
+		return
 	}
+	if err = vm.EnsureHostVolumesExistAndAttached(ctx); err != nil {
+		return
+	}
+	if err = vm.configureSharedPorts(ctx); err != nil {
+		return
+	}
+	if err = vm.configureMemoryAndCpus(ctx); err != nil {
+		return
+	}
+	log2.Infof("%s : Start vm...", vm.HostName)
+	if err = vm.Vbox().Start(ctx); err != nil {
+		return
+	}
+	vm.info = VmInfoFor(ctx, vm.Name())
 	return
-}
-
-func (vm *Vm) ConfigureBeforeStart(ctx context.Context) *cmd.XbeeError {
-	if err := vm.DeleteNATRules(ctx); err != nil {
-		return err
-	}
-	if err := vm.EnsureXbeeSharedFolder(ctx); err != nil {
-		return err
-	}
-	if err := vm.EnsureHostVolumesExistAndAttached(ctx); err != nil {
-		return err
-	}
-	if err := vm.configureSharedPorts(ctx); err != nil {
-		return err
-	}
-	return vm.configureMemoryAndCpus(ctx)
 }
 
 func (vm *Vm) EnsureXbeeSharedFolder(ctx context.Context) *cmd.XbeeError {
@@ -473,8 +329,6 @@ func (vm *Vm) addSharedFolder(ctx context.Context, volumeName string) *cmd.XbeeE
 
 // configureMemoryAndCpus is used before starting a new or existing VM.
 func (vm *Vm) configureMemoryAndCpus(ctx context.Context) *cmd.XbeeError {
-	log2.Infof("memory set to %d Mo", vm.Host.Specification.Memory)
-	log2.Infof("cpus set to %d", vm.Host.Specification.Cpus)
 	return vm.Vbox().Modify(ctx, "--memory", strconv.Itoa(vm.Host.Specification.Memory), "--cpus", strconv.Itoa(vm.Host.Specification.Cpus))
 }
 
@@ -498,7 +352,6 @@ func (vm *Vm) assignSSHPortFromHost(ctx context.Context) *cmd.XbeeError {
 	NextPort.Lock()
 	defer NextPort.Unlock()
 	portS := NextPort.NextFreePort(strconv.Itoa(sshPort))
-	log2.Infof("Expose ssh port 22 (guest) to port %s (host)", portS)
 	if err := vm.Vbox().Modify(ctx, "--natpf1", fmt.Sprintf("ssh,tcp,127.0.0.1,%s,,22", portS)); err != nil {
 		return err
 	}
@@ -553,7 +406,6 @@ func (vm *Vm) ExposePorts(ctx context.Context, ports []string) *cmd.XbeeError {
 			log2.Warnf("port %s is already exposed for host %s. Skip action", strings.TrimLeft(natKey, "PRODUCT-"), vm.HostName)
 		} else {
 			hostPort, guestPort := vm.info.hostGuestPort(port)
-			log2.Infof("Expose port %s (guest) to port %s (host)", guestPort, hostPort)
 			if err := vm.Vbox().AddNATRule(ctx, natKey, hostPort, guestPort); err != nil {
 				return err
 			}
@@ -565,6 +417,11 @@ func (vm *Vm) ExposePorts(ctx context.Context, ports []string) *cmd.XbeeError {
 func (vm *Vm) NotExistingOrDown() bool {
 	state := vm.info.State()
 	return state == constants.State.Down || state == constants.State.NotExisting
+}
+
+func (vm *Vm) NotExisting() bool {
+	state := vm.info.State()
+	return state == constants.State.NotExisting
 }
 
 func (vm *Vm) InstanceInfo(ctx context.Context) (*provider.InstanceInfo, *cmd.XbeeError) {

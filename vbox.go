@@ -172,9 +172,9 @@ func (vbox *Vbox) cloneMedium(ctx context.Context, source newfs.File, target new
 	if _, err := vbox.execute(ctx, "clonemedium", "disk", source.String(), target.String()); err != nil {
 		return err
 	}
-	if _, err := vbox.execute(ctx, "closemedium", "disk", source.String()); err != nil {
-		return err
-	}
+	//if _, err := vbox.execute(ctx, "closemedium", "disk", source.String()); err != nil {
+	//	return err
+	//}
 	return nil
 }
 

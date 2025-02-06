@@ -21,11 +21,7 @@ func (pv Provider) Up() ([]*provider.InstanceInfo, *cmd.XbeeError) {
 	for _, vm := range other {
 		log2.Warnf("host %s is in state %s", vm.HostName, vm.info.State())
 	}
-	var list []util.Executor
-	for _, vm := range downOrNotExisting {
-		list = append(list, vm.Up)
-	}
-	if err := util.Execute(ctx, list...); err != nil {
+	if err := downOrNotExisting.Up(ctx); err != nil {
 		return nil, err
 	}
 	//var l []*Vm

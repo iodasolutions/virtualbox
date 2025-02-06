@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/iodasolutions/virtualbox/properties"
 	"github.com/iodasolutions/xbee-common/cmd"
+	"github.com/iodasolutions/xbee-common/newfs"
 	"github.com/iodasolutions/xbee-common/template"
 	"os/exec"
 	"unicode"
@@ -44,15 +45,11 @@ else
 fi
 `
 
-func DownloadAndAttachGuestAdditions(ctx context.Context, vmName string) *cmd.XbeeError {
+func EnsureGuestAdditions(ctx context.Context) (*newfs.File, *cmd.XbeeError) {
 	vboxVersion := Version()
 	url := fmt.Sprintf("https://download.virtualbox.org/virtualbox/%[1]s/VBoxGuestAdditions_%[1]s.iso", vboxVersion)
-	if cachedFile, err := DownloadIfNotCached(ctx, url); err != nil {
-		return err
-	} else {
-		vb := VboxFrom(vmName)
-		return vb.attacheDvdStorage(ctx, cachedFile, "1")
-	}
+	f, err := DownloadIfNotCached(ctx, url)
+	return &f, err
 }
 
 func DetachGuestAdditions(ctx context.Context, vmName string) *cmd.XbeeError {
