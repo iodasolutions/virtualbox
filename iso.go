@@ -99,6 +99,21 @@ func (iso *Iso) CreateAndAttach(ctx context.Context) *cmd.XbeeError {
 	return vb.attacheDvdStorage(ctx, isoFile, "0")
 }
 
+func (iso *Iso) DetachAndDelete(ctx context.Context) (err *cmd.XbeeError) {
+	vb := VboxFrom(iso.vm.Name())
+	_, err = vb.execute(ctx, "storageattach", iso.vm.Name(), "--storagectl", "IDE", "--port", "0", "--device", "0", "--medium", "none")
+	if err != nil {
+		return
+	}
+	_, err = vb.execute(ctx, "closemedium", "dvd", iso.File().String(), "--delete")
+	if err != nil {
+		return
+	}
+	return
+	//VBoxManage storageattach "MaVM" --storagectl "IDE" --port 1 --device 0 --medium none
+	//VBoxManage closemedium dvd "chemin/vers/le/fichier.iso" --delete
+}
+
 /*
 func (vbox *Vbox) attacheStorage(ctx context.Context, cachedFile newfs.File) error {
 	_, err := vbox.execute(ctx, "storageattach", vbox.name,
@@ -115,26 +130,3 @@ func (iso *Iso) File() newfs.File {
 	isoFile := properties.VmFolder(iso.vm.Name()).ChildFile("seed.iso")
 	return isoFile
 }
-func (iso *Iso) DetachAndDelete(ctx context.Context) *cmd.XbeeError {
-	vb := VboxFrom(iso.vm.Name())
-	if err := vb.detachDvdStorage(ctx, "0"); err != nil {
-		return err
-	}
-	isoFile := iso.File()
-	if err := isoFile.EnsureDelete(); err != nil {
-		return cmd.Error("cannot ensure %s was deleted: %v", isoFile, err)
-	}
-	return nil
-}
-
-/*
-func (vbox *Vbox) detachStorage(ctx context.Context) error {
-	_, err := vbox.execute(ctx, "storageattach", vbox.name,
-		"--type", "dvddrive",
-		"--storagectl", "IDE",
-		"--port", "0",
-		"--device", "1",
-		"--medium", "none")
-	return err
-}
-*/

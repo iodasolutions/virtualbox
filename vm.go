@@ -27,6 +27,7 @@ type Vm struct {
 	Host    *Host
 
 	//lazzily loaded
+	originDisk           newfs.File //computed only when creating a new VM.
 	info                 *vminfo
 	InitiallyNotExisting bool
 	InitiallyDown        bool
@@ -47,15 +48,6 @@ func fromHost(ctx context.Context, h *provider.XbeeHost) (*Vm, error) {
 	}
 	vm.info = VmInfoFor(ctx, vm.Name())
 	return vm, nil
-}
-
-func (vm *Vm) HaltInstance(ctx context.Context) *cmd.XbeeError {
-	vb := vm.Vbox()
-	if err := vb.Stop(ctx); err != nil {
-		return err
-	}
-	log2.Infof("%s : Shutdown succeeded", vm.HostName)
-	return vm.DeleteNATRules(ctx)
 }
 
 func (vm *Vm) Name() string {
@@ -80,14 +72,14 @@ func (vm *Vm) Vbox() *Vbox {
 func (vm *Vm) Destroy(ctx context.Context) *cmd.XbeeError {
 	state := vm.info.State()
 	if state == constants.State.Up {
-		if err := vm.HaltInstance(ctx); err != nil {
-			return err
-		}
-	}
-	if err := vm.EnsureVolumesDetached(ctx); err != nil {
+		vb := vm.Vbox()
+		_, err := vb.execute(ctx, "controlvm", vb.name, "poweroff")
 		return err
 	}
-	if err := vm.EnsureIsoDetached(ctx); err != nil {
+	if err := vm.AfterDown(ctx); err != nil {
+		return err
+	}
+	if err := vm.EnsureVolumesDetached(ctx); err != nil {
 		return err
 	}
 	if err := vm.Vbox().Unregister(ctx); err != nil {
@@ -147,33 +139,34 @@ func extractVmdk(aPath newfs.File) (newfs.File, *cmd.XbeeError) {
 }
 
 func (vm *Vm) VirtualDisk() newfs.File {
-	origin := newfs.NewFile(vm.Host.Specification.Disk)
-	return vm.Folder().ChildFile(origin.Base())
+	return vm.Folder().ChildFile("xbee-system.vmdk")
 }
-func (vm *Vm) ensureVmdkPresent(ctx context.Context) (newfs.File, *cmd.XbeeError) {
-	if vm.Host.EffectiveDisk().Exists() {
-		return vm.Host.EffectiveDisk(), nil
+func (vm *Vm) computeOriginVmdk(ctx context.Context) (err *cmd.XbeeError) {
+	originDisk := vm.Host.OriginDisk()
+	if !originDisk.Exists() {
+		if originDisk, err = DownloadIfNotCached(ctx, vm.Host.Specification.Disk); err != nil {
+			return
+		}
+		if originDisk, err = extractVmdk(originDisk); err != nil {
+			return
+		}
+		if vm.guestAddition, err = EnsureGuestAdditions(ctx); err != nil {
+			return
+		}
 	}
-	originDisk, err := DownloadIfNotCached(ctx, vm.Host.Specification.Disk)
-	if err != nil {
-		return newfs.NewFile(""), err
-	}
-	return extractVmdk(originDisk)
+	vm.originDisk = originDisk
+	return
 }
 
 func (vm *Vm) prepareForCreation(ctx context.Context) (err *cmd.XbeeError) {
-	var vmdkOrigin newfs.File
-	if vmdkOrigin, err = vm.ensureVmdkPresent(ctx); err != nil {
+	if err = vm.computeOriginVmdk(ctx); err != nil {
 		return
 	}
 	//	vmdkOrigin.CopyToPath(vm.VirtualDisk())
 	vb := vm.Vbox()
 	log2.Infof("Create disk %s", vm.VirtualDisk())
-	if err = vb.cloneMedium(ctx, vmdkOrigin, vm.VirtualDisk()); err != nil {
+	if err = vb.cloneMedium(ctx, vm.originDisk, vm.VirtualDisk()); err != nil {
 		return err
-	}
-	if vm.guestAddition, err = EnsureGuestAdditions(ctx); err != nil {
-		return
 	}
 	log2.Infof("%s : Host does not exist, first create it", vm.HostName)
 	if _, err = vb.execute(ctx, "createvm", "--name", vm.Name(), "--ostype", vm.Host.Specification.OsType, "--register"); err != nil {
@@ -192,8 +185,10 @@ func (vm *Vm) prepareForCreation(ctx context.Context) (err *cmd.XbeeError) {
 	if err = iso.CreateAndAttach(ctx); err != nil {
 		return
 	}
-	if err = vb.attacheDvdStorage(ctx, *vm.guestAddition, "1"); err != nil {
-		return
+	if vm.guestAddition != nil {
+		if err = vb.attacheDvdStorage(ctx, *vm.guestAddition, "1"); err != nil {
+			return
+		}
 	}
 	if err = vb.attachHddStorage(ctx, vm.VirtualDisk(), "0"); err != nil {
 		return
@@ -219,6 +214,19 @@ func (vm *Vm) waitUntilCloudInitFinished() *cmd.XbeeError {
 	return util.Execute(ctx, ff)
 }
 
+func (vm *Vm) waitDown(ctx context.Context) *cmd.XbeeError {
+	ff := func(ctx context.Context) *cmd.XbeeError {
+		for {
+			vm.info = VmInfoFor(ctx, vm.Name())
+			if vm.info.State() == constants.State.Down {
+				return nil
+			}
+			time.Sleep(time.Second)
+		}
+	}
+	return util.Execute(ctx, ff)
+}
+
 func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 	log2.Infof("%s : wait until SSH open...", vm.HostName)
 	ff := func(_ context.Context) *cmd.XbeeError {
@@ -228,6 +236,7 @@ func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 			if err == nil {
 				return nil
 			}
+			log2.Infof("%s : SSH connection to 127.0.0.1:%s still not opened for user %s", vm.sshPort, vm.User)
 			time.Sleep(time.Second)
 		}
 	}
@@ -238,18 +247,32 @@ func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 	return nil
 }
 
-func (vm *Vm) ExportToVmdk(ctx context.Context) *cmd.XbeeError {
-	vmdkPath, err := vm.Vbox().export(ctx)
+func (vm *Vm) ExportToVmdk(ctx context.Context) (err *cmd.XbeeError) {
+	vm.conn, err = ssh2.Connect("127.0.0.1", vm.SSHPort(), vm.User)
 	if err != nil {
-		return err
+		return
+	}
+	if err = vm.conn.RunCommandQuiet("sudo cloud-init clean"); err != nil {
+		return
+	}
+	if err = vm.conn.RunCommandQuiet("sudo shutdown -P now"); err != nil {
+		return
+	}
+	if err = vm.AfterDown(ctx); err != nil {
+		return
+	}
+	var vmdkPath *newfs.File
+	if vmdkPath, err = vm.Vbox().export(ctx); err != nil {
+		return
 	}
 	defer vmdkPath.Dir().Delete()
 	log2.Infof("Export vm %s to [%s]...", vm.HostName, vmdkPath)
-	vm.Host.EffectiveDisk().Dir().EnsureExists()
-	if err := os.Rename(vmdkPath.String(), vm.Host.EffectiveDisk().String()); err != nil {
-		return cmd.Error("failed to move %s to %s", vmdkPath, vm.Host.EffectiveDisk().String())
+	targetDisk := vm.Host.TargetDiskForImage()
+	targetDisk.Dir().EnsureExists()
+	if err2 := os.Rename(vmdkPath.String(), targetDisk.String()); err2 != nil {
+		err = cmd.Error("failed to move %s to %s", vmdkPath, targetDisk.String())
 	}
-	return nil
+	return
 }
 
 func (vm *Vm) configureNic(ctx context.Context) *cmd.XbeeError {
@@ -374,7 +397,10 @@ func (vm *Vm) EnsureVolumesDetached(ctx context.Context) *cmd.XbeeError {
 	return nil
 }
 
-func (vm *Vm) EnsureIsoDetached(ctx context.Context) *cmd.XbeeError {
+func (vm *Vm) AfterDown(ctx context.Context) *cmd.XbeeError {
+	if err := vm.waitDown(ctx); err != nil {
+		return err
+	}
 	if vm.info.IsSeedAttached() {
 		iso := IsoFor(vm)
 		if err := iso.DetachAndDelete(ctx); err != nil {
@@ -386,7 +412,7 @@ func (vm *Vm) EnsureIsoDetached(ctx context.Context) *cmd.XbeeError {
 			return err
 		}
 	}
-	return nil
+	return vm.DeleteNATRules(ctx)
 }
 
 func (vm *Vm) DeleteNATRules(ctx context.Context) *cmd.XbeeError {
@@ -440,7 +466,7 @@ func (vm *Vm) InstanceInfo(ctx context.Context) (*provider.InstanceInfo, *cmd.Xb
 		SSHPort:       vm.SSHPort(),
 		Ip:            ip,
 		User:          vm.User,
-		PackIdExist:   vm.Host.EffectiveDisk().Exists(),
+		PackIdExist:   vm.Host.PackDisk().Exists(),
 		SystemIdExist: vm.Host.SystemDisk().Exists(),
 	}, nil
 }

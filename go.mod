@@ -3,7 +3,7 @@ module github.com/iodasolutions/virtualbox
 go 1.21.1
 
 require (
-	github.com/iodasolutions/xbee-common v0.0.0-20250204201442-457a653257c1
+	github.com/iodasolutions/xbee-common v0.0.0-20250208214433-bd61c806c4b8
 	github.com/kdomanski/iso9660 v0.4.0
 )
 

@@ -40,11 +40,6 @@ func (vbox *Vbox) Start(ctx context.Context) *cmd.XbeeError {
 	return err
 }
 
-func (vbox *Vbox) Stop(ctx context.Context) *cmd.XbeeError {
-	_, err := vbox.execute(ctx, "controlvm", vbox.name, "poweroff")
-	return err
-}
-
 func (vbox *Vbox) Unregister(ctx context.Context) *cmd.XbeeError {
 	_, err := vbox.execute(ctx, "unregistervm", vbox.name)
 	return err
@@ -172,9 +167,9 @@ func (vbox *Vbox) cloneMedium(ctx context.Context, source newfs.File, target new
 	if _, err := vbox.execute(ctx, "clonemedium", "disk", source.String(), target.String()); err != nil {
 		return err
 	}
-	//if _, err := vbox.execute(ctx, "closemedium", "disk", source.String()); err != nil {
-	//	return err
-	//}
+	if _, err := vbox.execute(ctx, "closemedium", "disk", source.String()); err != nil {
+		return err
+	}
 	return nil
 }
 

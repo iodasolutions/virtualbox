@@ -41,9 +41,29 @@ func NewHost(host *provider.XbeeHost) (*Host, *cmd.XbeeError) {
 	return &Host{XbeeHost: host, Specification: &result}, nil
 }
 
-func (h *Host) EffectiveDisk() newfs.File {
-	return ExportFolder().ChildFile(h.EffectiveHash() + ".vmdk")
+func (h *Host) PackDisk() newfs.File {
+	if h.PackOrigin != nil {
+		return ExportFolder().ChildFile(h.PackHash + ".vmdk")
+	}
+	return newfs.NewFile("")
+}
+
+func (h *Host) OriginDisk() newfs.File {
+	if h.PackOrigin != nil {
+		result := ExportFolder().ChildFile(h.PackHash + ".vmdk")
+		if result.Exists() {
+			return result
+		}
+	}
+	return h.SystemDisk()
 }
 func (h *Host) SystemDisk() newfs.File {
 	return ExportFolder().ChildFile(h.SystemHash + ".vmdk")
+}
+
+func (h *Host) TargetDiskForImage() newfs.File {
+	if h.PackOrigin != nil {
+		return ExportFolder().ChildFile(h.PackHash + ".vmdk")
+	}
+	return h.SystemDisk()
 }

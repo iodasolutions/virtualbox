@@ -21,3 +21,4 @@ VBoxManage dhcpserver add --netname "default_xbee-system-packs-b6ddd5d83b" --ip 
 VBoxManage natnetwork modify --netname "default_xbee-system-packs-b6ddd5d83b" --disable
 VBoxManage natnetwork remove --netname "default_xbee-system-packs-b6ddd5d83b"
 
+VBoxManage list hdds

@@ -78,6 +78,10 @@ github.com/iodasolutions/xbee-common v0.0.0-20250204201228-c77149a4d8de h1:EdEIe
 github.com/iodasolutions/xbee-common v0.0.0-20250204201228-c77149a4d8de/go.mod h1:/5yiir8cysxbyGz0cA4HBMeJas40vNlQyUjkLyZAaWc=
 github.com/iodasolutions/xbee-common v0.0.0-20250204201442-457a653257c1 h1:18Aj3aNkcneLdGqdU18Em/nptYq7PO6otOPxYI5XlGM=
 github.com/iodasolutions/xbee-common v0.0.0-20250204201442-457a653257c1/go.mod h1:/5yiir8cysxbyGz0cA4HBMeJas40vNlQyUjkLyZAaWc=
+github.com/iodasolutions/xbee-common v0.0.0-20250208133409-4d35932a5f1f h1:BVyoYSMloNhgt2p6Vd5plGbuI1XlBjvJTTEWYe1LQGw=
+github.com/iodasolutions/xbee-common v0.0.0-20250208133409-4d35932a5f1f/go.mod h1:/5yiir8cysxbyGz0cA4HBMeJas40vNlQyUjkLyZAaWc=
+github.com/iodasolutions/xbee-common v0.0.0-20250208214433-bd61c806c4b8 h1:uTgzz6Pb3rwuuNsauWPVymPh3fIh99ZTrkhcv5QEzZc=
+github.com/iodasolutions/xbee-common v0.0.0-20250208214433-bd61c806c4b8/go.mod h1:/5yiir8cysxbyGz0cA4HBMeJas40vNlQyUjkLyZAaWc=
 github.com/jlaffaye/ftp v0.2.0 h1:lXNvW7cBu7R/68bknOX3MrRIIqZ61zELs1P2RAiA3lg=
 github.com/jlaffaye/ftp v0.2.0/go.mod h1:is2Ds5qkhceAPy2xD6RLI6hmp/qysSoymZ+Z2uTnspI=
 github.com/kdomanski/iso9660 v0.4.0 h1:BPKKdcINz3m0MdjIMwS0wx1nofsOjxOq8TOr45WGHFg=

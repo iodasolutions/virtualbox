@@ -34,6 +34,16 @@ func (vms Vms) Existing() (result Vms, other Vms) {
 	}
 	return
 }
+func (vms Vms) Down() (result Vms, other Vms) {
+	for _, vm := range vms {
+		if vm.info.State() == constants.State.Down {
+			result = append(result, vm)
+		} else {
+			other = append(other, vm)
+		}
+	}
+	return
+}
 
 func (vms Vms) NotExistingOrDown() (result Vms, other Vms) {
 	for _, vm := range vms {
@@ -110,14 +120,11 @@ func (vms Vms) Up(ctx context.Context) (err *cmd.XbeeError) {
 			if err = vm.waitUntilCloudInitFinished(); err != nil {
 				return
 			}
-			if !vm.Host.EffectiveDisk().Exists() {
+			if vm.guestAddition != nil {
 				if err = vm.conn.RunScript(GuestAdditionScript()); err != nil {
 					return
 				}
 				log2.Infof("%s : guest addition installed", vm.HostName)
-				if err := vm.conn.RunCommandQuiet("sudo cloud-init clean"); err != nil {
-					return err
-				}
 			}
 		}
 		if err = vm.conn.RunCommand("sudo mkdir -p /root/.xbee/cache-artefacts && sudo mount -t vboxsf xbee /root/.xbee/cache-artefacts"); err != nil {
