@@ -73,8 +73,9 @@ func (vm *Vm) Destroy(ctx context.Context) *cmd.XbeeError {
 	state := vm.info.State()
 	if state == constants.State.Up {
 		vb := vm.Vbox()
-		_, err := vb.execute(ctx, "controlvm", vb.name, "poweroff")
-		return err
+		if _, err := vb.execute(ctx, "controlvm", vb.name, "poweroff"); err != nil {
+			return err
+		}
 	}
 	if err := vm.AfterDown(ctx); err != nil {
 		return err
@@ -236,7 +237,7 @@ func (vm *Vm) waitSSH(ctx context.Context) *cmd.XbeeError {
 			if err == nil {
 				return nil
 			}
-			log2.Infof("%s : SSH connection to 127.0.0.1:%s still not opened for user %s", vm.sshPort, vm.User)
+			log2.Infof("%s : SSH connection to 127.0.0.1:%s still not opened for user %s", vm.HostName, vm.sshPort, vm.User)
 			time.Sleep(time.Second)
 		}
 	}
@@ -255,6 +256,9 @@ func (vm *Vm) ExportToVmdk(ctx context.Context) (err *cmd.XbeeError) {
 	if err = vm.conn.RunCommandQuiet("sudo cloud-init clean"); err != nil {
 		return
 	}
+	//if err = vm.conn.RunCommandQuiet("sudo rm /etc/machine-id"); err != nil {
+	//	return
+	//}
 	if err = vm.conn.RunCommandQuiet("sudo shutdown -P now"); err != nil {
 		return
 	}
